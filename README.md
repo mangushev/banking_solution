@@ -1,5 +1,5 @@
 # banking_solution
-Helps customers to estimate future debits/credits on account and advise amount of funds transfer to avoid overdraft
+Helps customers to estimate future debits/credits on account and advises how much to transfer to avoid overdraft
 
 There are two models here:
 
