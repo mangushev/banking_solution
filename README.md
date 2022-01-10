@@ -121,42 +121,27 @@ Actor loss
 Entropy
 ![output sample](samples/curves/balance-maintenance/data_prep_cell_12_output_0.png "Entropy")
 
-4. Evaluation
+4. Prediction
 
-Training produces plenty of metrics:
+Outputs:
 
-- rewards
-- waste
-- overdraft
-- critical balance
-- balance
-- action (transfer)
-- spending
-- critic loss
-- actor loss
-- entropy
-
-5. Prediction
-
-It produces 
-
-as trained model:
+As trained model:
 - balance
 - action
 - overdraft
 
-Model in action!
-![output sample](samples/curves/balance-maintenance/data_prep_cell_13_output_0.png "Actor loss")
+Model actions (sample for one account )
+![output sample](samples/curves/balance-maintenance/data_prep_cell_13_output_1.png "model actions")
 
-as heuristic algorithm:
+As heuristic algorithm:
 - balance
 - action
 - overdraft
 
-Heuristic 
-![output sample](samples/curves/balance-maintenance/data_prep_cell_14_output_0.png "Actor loss")
+Heuristic (sample for one account )
+![output sample](samples/curves/balance-maintenance/data_prep_cell_14_output_0.png "heuristic")
 
-and
+Debit data:
 
 - debit estimate
 - actual debit
@@ -165,4 +150,4 @@ Sample command:
 
 python training.py --action=PREDICT --train_episodes=6000 --output_dir=checkpoints --algorithm=A2C --num_accounts=4997 --train_file=data/balance_train_estimate.tfrecords --batch_size=2 --waste=32.0 --hidden_size=256 --entropy_coefficient=0.0001 --actor_learning_rate=1e-4 --critic_learning_rate=1e-4 --use_actual --zero_weight=0.2 --critical_weight=0.1 --critical_balance=0.02 --predict_file=data/balance_test_estimate.tfrecords
 
-This will produce output.csv with iabove metrics for each timestep. if taking one account and following it over time, metrics will look like this
+This will produce output.csv with bove metrics for each timestep as illustrated above for one account.
