@@ -15,9 +15,9 @@ Training steps:
 
 1. Prepare data
 
-Data that is used here is from fraud-detection-handbook. Please download and generate data. Something like two years (730 days) should be used because data is generated for forecasting and for second task - estimating deposit to avoid overdrafts. This second models need more time steps. One year is just about 52 weeks, so two years seems more reasonable. When generating data in fraud-detection-handbook, fraud shoud be disabled.
+Data that is used here is from fraud-detection-handbook. Please download and generate data. Something like two years (730 days) should be used because data is generated for forecasting and for second task - estimating deposit to avoid overdrafts. This second models need more time steps. One year is just about 52 weeks, so two years seems more reasonable. When generating data in fraud-detection-handbook, fraud should be disabled.
 
-Command below will create train and test files for both forecasting and estimating deposit to avoid overdrafts plus file sutable for autoregression:
+Command below will create train and test files for both forecasting and estimating deposit to avoid overdrafts plus file suitable for autoregression:
 
 python prepare_data.py --lookback_history=12 --scaler=Custom --aggregate=WEEK --train_file4=data/simulated_without_fraud_730.txt
 
@@ -51,7 +51,7 @@ Training steps:
 
 1. Prepare data
 
-Estimates are done in the forecasting part. It is just packaged differenly for this problem, records is a time sequence, each record has estimated and actual value structured as (accounts, estimated_value(s)). For example, (4997, 1). 1 is for debit in this case. if creadit is predicted as well, it will be 2.
+Estimates are done in the forecasting part. It is just packaged differently for this problem, records is a time sequence, each record has estimated and actual value structured as (accounts, estimated_value(s)). For example, (4997, 1). 1 is for debit in this case. if credit is predicted as well, it will be 2.
 
 Both for training and prediction, customer balances are random. Obviously, for prediction, it would be needed to provide actual account balances.  
 
@@ -75,9 +75,9 @@ critical - 1 if breached some critical level
 
 k1 - tuning coefficient for overdraft
 k2 - tuning coefficient for critical balance
-k3 - tuning coefficient for balance panishment
+k3 - tuning coefficient for balance punishment
  
-Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I fould that balance stays somewhere in $3,000 on avarage for all customers. Average deposit trends towsard avarage expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
+Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I found that balance stays somewhere in $3,000 on average for all customers. Average deposit trends toward average expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
 
 
 3. Training
@@ -148,4 +148,4 @@ Sample command:
 python training.py --action=PREDICT --train_episodes=6000 --output_dir=checkpoints-clean --num_accounts=4997 --train_file=data/balance_train_estimate.tfrecords --batch_size=2 --waste=20.0 --hidden_size=96 --actor_learning_rate=1e-5 --critic_learning_rate=1e-5 --decay_steps=100000 --use_actual --zero_weight=0.6 --critical_weight=0.6 --critical_balance=0.005 --predict_file=data/balance_test_estimate.tfrecords
 
 
-This will produce output.csv with bove metrics for each timestep as illustrated above for one account.
+This will produce output.csv with above metrics for each timestep as illustrated above for one account.
