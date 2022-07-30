@@ -9,7 +9,7 @@ There are two models here:
 Forecasting
 -----------
 
-Model uses transformer-decoder architecture. Last output item is a prediction of the next interval value (next week or next day). 
+Model uses transformer-decoder architecture. Last output item is a prediction of the next interval value (next week or next day). I used transformer code from BERT. I wrote my own transformer encode-decode - adversarial sparse transformer. It would be better to use my ast project to forecast expenditures!
 
 Training steps:
 
@@ -45,7 +45,7 @@ python training.py --action=PREDICT --output_dir=checkpoints --hidden_size=32 --
 Estimation of deposit
 ---------------------
 
-This model is based on code of inventory management. It is a similar problem. If there is an outflow of funds then what the amount should be brought in? This is Markov decision process (MDP) implemented with deep RL, TD(0) synchronous A2C algorithm. PPO is also there though it does not perform well. Please review also inventory_management, it has references to papers explaining what it is based on and how it is implemented.
+This model is based on the code of inventory management project. It is a similar problem. If there is an outflow of funds then what the amount should be brought in? This is Markov decision process (MDP) implemented with DDPG algorithm. I found difficulty to use stochastic algorithm. Action space is positive. Gaussian continuous distribution despite mean restricted to positive, will always produce some negative samples. Using truncated Gaussian or setting negative samples to zero, did not work well with my experiments. Another option is to use stochastic discreet action space. Please also review inventory_management, it has references to papers explaining what it is based on and how it is implemented.
 
 Training steps:
 
@@ -77,49 +77,46 @@ k1 - tuning coefficient for overdraft
 k2 - tuning coefficient for critical balance
 k3 - tuning coefficient for balance panishment
  
+Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I fould that balance stays somewhere in $3,000 on avarage all customers. Average deposit trends towsard avarage expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
+
+
 3. Training
 
-When training, see critic and actor and reward convergence. Also, at the end, account funding transfers averages should be close to the average spending: 2k ~ 2k. for example. Otherwise, there balance will get into zero and there will be overdrafts or balance will get to maximum and there will be a lot of money in the account.
+When training, see critic and actor and reward convergence. Also, at the end, account funding transfers averages should be close to the average spending. Otherwise, the balance will get into zero and there will be overdrafts or balance will get to maximum and there will be a lot of money in the account.
 
 Command sample:
 
-python training.py --action=TRAIN --train_episodes=6000 --output_dir=checkpoints --algorithm=A2C --num_accounts=4997 --train_file=balance_train_estimate.tfrecords --batch_size=2 --waste=32.0 --hidden_size=256 --entropy_coefficient=0.0001 --actor_learning_rate=1e-4 --critic_learning_rate=1e-4 --use_actual --zero_weight=0.2 --critical_weight=0.1 --critical_balance=0.02
+python training.py --action=TRAIN --train_episodes=6000 --output_dir=checkpoints --num_accounts=4997 --train_file=data/balance_train_estimate.tfrecords --batch_size=2 --waste=18.0 --hidden_size=96 --actor_learning_rate=1e-5 --critic_learning_rate=1e-5 --decay_steps=100000 --use_actual --zero_weight=0.6 --critical_weight=0.6 --critical_balance=0.005
 
 Rewards 
-![output sample](samples/curves/balance-maintenance/data_prep_cell_1_output_0.png "rewards")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_2_output_0.png "rewards")
 
 Waste
-![output sample](samples/curves/balance-maintenance/data_prep_cell_2_output_0.png "waste")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_3_output_0.png "waste")
 
 Overdraft
-![output sample](samples/curves/balance-maintenance/data_prep_cell_3_output_0.png "Overdraft")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_4_output_0.png "Overdraft")
 
 Critical balance
-![output sample](samples/curves/balance-maintenance/data_prep_cell_4_output_0.png "Critical balance")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_5_output_0.png "Critical balance")
 
 Balance
-![output sample](samples/curves/balance-maintenance/data_prep_cell_5_output_0.png "Balance")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_6_output_0.png "Balance")
 
-Action gaussian mean value
-![output sample](samples/curves/balance-maintenance/data_prep_cell_6_output_0.png "Action gaussian mean value")
-
-Action Sample from distribution
-![output sample](samples/curves/balance-maintenance/data_prep_cell_7_output_0.png "Action Sample from distribution")
+Action
+![output sample](samples/curves/balance-maintenance/data_prep_cell_8_output_0.png "Action")
 
 Spendings Actual
-![output sample](samples/curves/balance-maintenance/data_prep_cell_8_output_0.png "Spendings Actual")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_9_output_0.png "Spendings Actual")
 
 Spendings Estimate
-![output sample](samples/curves/balance-maintenance/data_prep_cell_9_output_0.png "Spendings Estimate")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_10_output_0.png "Spendings Estimate")
 
 Critic loss
-![output sample](samples/curves/balance-maintenance/data_prep_cell_10_output_0.png "Critic loss")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_11_output_0.png "Critic loss")
 
 Actor loss
-![output sample](samples/curves/balance-maintenance/data_prep_cell_11_output_0.png "Actor loss")
-
-Entropy
-![output sample](samples/curves/balance-maintenance/data_prep_cell_12_output_0.png "Entropy")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_12_output_0.png "Actor loss")
 
 4. Prediction
 
@@ -131,7 +128,7 @@ As trained model:
 - overdraft
 
 Model actions (sample for one account )
-![output sample](samples/curves/balance-maintenance/data_prep_cell_13_output_1.png "model actions")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_14_output_1.png "model actions")
 
 As heuristic algorithm:
 - balance
@@ -139,7 +136,7 @@ As heuristic algorithm:
 - overdraft
 
 Heuristic (sample for one account )
-![output sample](samples/curves/balance-maintenance/data_prep_cell_14_output_0.png "heuristic")
+![output sample](samples/curves/balance-maintenance/data_prep_cell_15_output_0.png "heuristic")
 
 Debit data:
 
@@ -148,6 +145,7 @@ Debit data:
 
 Sample command:
 
-python training.py --action=PREDICT --train_episodes=6000 --output_dir=checkpoints --algorithm=A2C --num_accounts=4997 --train_file=data/balance_train_estimate.tfrecords --batch_size=2 --waste=32.0 --hidden_size=256 --entropy_coefficient=0.0001 --actor_learning_rate=1e-4 --critic_learning_rate=1e-4 --use_actual --zero_weight=0.2 --critical_weight=0.1 --critical_balance=0.02 --predict_file=data/balance_test_estimate.tfrecords
+python training.py --action=PREDICT --train_episodes=6000 --output_dir=checkpoints-clean --num_accounts=4997 --train_file=data/balance_train_estimate.tfrecords --batch_size=2 --waste=20.0 --hidden_size=96 --actor_learning_rate=1e-5 --critic_learning_rate=1e-5 --decay_steps=100000 --use_actual --zero_weight=0.6 --critical_weight=0.6 --critical_balance=0.005 --predict_file=data/balance_test_estimate.tfrecords
+
 
 This will produce output.csv with bove metrics for each timestep as illustrated above for one account.
