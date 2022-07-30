@@ -77,7 +77,7 @@ k1 - tuning coefficient for overdraft
 k2 - tuning coefficient for critical balance
 k3 - tuning coefficient for balance punishment
  
-Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I found that balance stays somewhere in $3,000 on average for all customers. Average deposit trends toward average expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
+Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I found that balance stays somewhere in $3,000 on average for all customers. Average deposit trends toward average expenditures to about $700. Setting right k1, k2, k3 is actually quite tricky! 
 
 
 3. Training
