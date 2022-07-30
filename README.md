@@ -45,7 +45,7 @@ python training.py --action=PREDICT --output_dir=checkpoints --hidden_size=32 --
 Estimation of deposit
 ---------------------
 
-This model is based on the code of inventory management project. It is a similar problem. If there is an outflow of funds then what the amount should be brought in? This is Markov decision process (MDP) implemented with DDPG algorithm. I found difficulty to use stochastic algorithm. Action space is positive. Gaussian continuous distribution despite mean restricted to positive, will always produce some negative samples. Using truncated Gaussian or setting negative samples to zero, did not work well with my experiments. Another option is to use stochastic discreet action space. Please also review inventory_management, it has references to papers explaining what it is based on and how it is implemented.
+This model is based on the code of inventory management project. It is a similar problem. If there is an outflow of funds then what the amount should be brought in? This is Markov decision process (MDP) implemented with DDPG algorithm. I found difficulty to use stochastic algorithm. Action space is positive. Gaussian continuous distribution despite mean restricted to positive, will always produce some negative samples. Using truncated Gaussian or setting negative samples to zero, did not work well with my experiments. Another option is to use stochastic discrete action space. Please also review inventory_management, it has references to papers explaining what it is based on and how it is implemented.
 
 Training steps:
 
@@ -77,7 +77,7 @@ k1 - tuning coefficient for overdraft
 k2 - tuning coefficient for critical balance
 k3 - tuning coefficient for balance panishment
  
-Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I fould that balance stays somewhere in $3,000 on avarage all customers. Average deposit trends towsard avarage expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
+Increasing k1 and k2, k3 seems should result in a Policy to keep balance in some jail. I fould that balance stays somewhere in $3,000 on avarage for all customers. Average deposit trends towsard avarage expenditures to about %700. Setting right k1, k2, k3 is actually quite tricky! 
 
 
 3. Training
