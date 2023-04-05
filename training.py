@@ -1,4 +1,5 @@
 import os
+import time
 import sys
 import argparse
 
@@ -25,7 +26,6 @@ def trans_parser(serialized_example):
 
   return example
 
-#predict means that we run sequence with somne random initial balance and expenditures for each time period
 def predict():
   trans_dataset = tf.data.TFRecordDataset(FLAGS.predict_file)
   trans_dataset = trans_dataset.map(trans_parser)
@@ -33,7 +33,7 @@ def predict():
 
   actor = Actor(FLAGS.num_accounts, FLAGS.num_features, FLAGS.safety_level, FLAGS.transfer_limit, FLAGS.hidden_size, activation=tf.nn.relu, dropout_prob=FLAGS.dropout_prob)
 
-  #0.1 is 10k when date normalized to +-100k min/max. Model makes average balance at about $3k, so that's why initial balance is set like this. If balance is high, model sets action zero until balance gets down
+  #0.1 is 10k when date normalized to +-100k min/max
   x = tf.random.uniform(shape=[FLAGS.num_accounts], minval=0.01, maxval=0.05, dtype=tf.dtypes.float32)
   x_he = x
 
@@ -78,7 +78,6 @@ def predict():
         x = x_prime
         x_he = x_prime_he
 
-#training is both improving critic and actor and keeping balance in time!
 def train():
   #   Dimentions LEGEND:
   #   a - accounts
@@ -101,10 +100,12 @@ def train():
   checkpoint_prefix = os.path.join(FLAGS.output_dir, "ckpt")
   checkpoint = tf.train.Checkpoint(critic_optimizer=critic_optimizer, actor_optimizer=actor_optimizer, critic=critic, actor=actor)
   status = checkpoint.restore(tf.train.latest_checkpoint(FLAGS.output_dir))
+  #tf.print(actor_optimizer.iterations, output_stream=sys.stderr, summarize=-1)
+  #sys.exit(0)
 
   episode = -1
   while (episode < FLAGS.train_episodes):
-    #random initial inventory, 5k - 15k balances.
+    #random initial inventory, 5k - 15k balances
     x = tf.random.uniform(shape=[FLAGS.num_accounts], minval=0.05, maxval=0.15, dtype=tf.dtypes.float32)
     env.reset(x)
     q_estimate = x * FLAGS.waste
@@ -112,9 +113,12 @@ def train():
     count = 0
     for batch_dataset in trans_dataset:
       with tf.GradientTape() as actor_tape, tf.GradientTape() as critic_tape:
+        start_time=time.time()
         experience_step = tf.constant(0)
         experience_s = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts, FLAGS.num_features]), name="experience_s")
         experience_a = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts]), name="experience_a")
+        experience_sample = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts]), name="experience_sample")
+        experience_entropy = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts]), name="experience_sample")
         experience_s_prime = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts, FLAGS.num_features]), name="experience_s_prime")
         experience_a_prime = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts]), name="experience_a_prime")
         experience_r = tf.TensorArray(size=FLAGS.batch_size, dtype=tf.float32, element_shape=tf.TensorShape([FLAGS.num_accounts]), name="experience_r_prime")
@@ -125,16 +129,29 @@ def train():
 
         batch_iterator = batch_dataset.map(trans_parser)
 
-        debit_estimate = next(iter(batch_iterator))['estimate'][:, 0]
-        debit = next(iter(batch_iterator))['actual'][:, 0]
+        #debit_estimate = next(iter(batch_iterator))['estimate'][:, 0]
+        #debit = next(iter(batch_iterator))['actual'][:, 0]
 
-        if (FLAGS.use_actual):
-          s = tf.transpose(tf.stack([x, debit, q_estimate], axis=0), perm=[1, 0])
-        else:
-          s = tf.transpose(tf.stack([x, debit_estimate, q_estimate], axis=0), perm=[1, 0])
+        #if (FLAGS.use_actual):
+        #  s = tf.transpose(tf.stack([x, debit, q_estimate], axis=0), perm=[1, 0])
+        #else:
+        #  s = tf.transpose(tf.stack([x, debit_estimate, q_estimate], axis=0), perm=[1, 0])
 
+        bootstrap_step = True
         for item in batch_iterator:
-          a = actor.random(s)
+          if bootstrap_step:
+            debit_estimate = item['estimate'][:, 0]
+            debit = item['actual'][:, 0]
+
+            if (FLAGS.use_actual):
+              s = tf.transpose(tf.stack([x, debit, q_estimate], axis=0), perm=[1, 0])
+            else:
+              s = tf.transpose(tf.stack([x, debit_estimate, q_estimate], axis=0), perm=[1, 0])
+
+            bootstrap_step = False
+            continue
+
+          a, dist_entropy, policy_sampled = actor.random(s)
 
           experience_s = experience_s.write(experience_step, s)
 
@@ -153,9 +170,11 @@ def train():
           else:
             s = tf.transpose(tf.stack([x, debit_estimate, q_estimate], axis=0), perm=[1, 0])
 
-          a_prime = actor.random(s)
+          a_prime, _, _ = actor.random(s)
 
           experience_a = experience_a.write(experience_step, a)
+          experience_sample = experience_sample.write(experience_step, policy_sampled)
+          experience_entropy = experience_entropy.write(experience_step, dist_entropy)
           experience_s_prime = experience_s_prime.write(experience_step, s)
           experience_a_prime = experience_a_prime.write(experience_step, a_prime)
           experience_r = experience_r.write(experience_step, r)
@@ -171,6 +190,8 @@ def train():
         x_batch = tf.reshape(experience_s.stack()[:experience_step, :, 0], [-1])
         sal_bat = tf.reshape(experience_s.stack()[:experience_step, :, 1], [-1])
         a_batch = tf.reshape(experience_a.stack()[:experience_step, :], [-1])
+        sample_batch = tf.reshape(experience_sample.stack()[:experience_step, :], [-1])
+        entropy_batch = tf.reshape(experience_entropy.stack()[:experience_step, :], [-1])
         s_prime_batch = tf.reshape(experience_s_prime.stack()[:experience_step, :, :], [-1, FLAGS.num_features])
         a_prime_batch = tf.reshape(experience_a_prime.stack()[:experience_step, :], [-1])
         r_batch = tf.reshape(experience_r.stack()[:experience_step, :], [-1])
@@ -186,6 +207,7 @@ def train():
 
         tf.print("x    :", actor_optimizer.iterations, episode, tf.reduce_mean(x_batch, keepdims=False), output_stream=sys.stderr, summarize=-1)
         tf.print("a    :", actor_optimizer.iterations, episode, tf.reduce_mean(a_batch, keepdims=False), output_stream=sys.stderr, summarize=-1)
+        tf.print("sample:", actor_optimizer.iterations, episode, tf.reduce_mean(sample_batch, keepdims=False), output_stream=sys.stderr, summarize=-1)
         tf.print("estimate:", actor_optimizer.iterations, episode, tf.reduce_mean(sal_bat, keepdims=False), output_stream=sys.stderr, summarize=-1)
         tf.print("debit:", actor_optimizer.iterations, episode, tf.reduce_mean(debit_batch, keepdims=False), output_stream=sys.stderr, summarize=-1)
 
@@ -205,12 +227,32 @@ def train():
         critic_loss = tf.reduce_mean(tf.math.square(delta), keepdims=False)
         tf.print("critic loss:", actor_optimizer.iterations, episode, critic_loss, output_stream=sys.stderr, summarize=-1)
 
+        if actor_optimizer.iterations == 0: #for PPO
+          tf.print("p_old == p_batch:", output_stream=sys.stderr, summarize=-1)
+          sample_old = sample_batch #sampled policy
+
+        #(t*a, n), (t*a, n) --> (t*a) --> (1)
+        entropy_p = -tf.reduce_mean(entropy_batch) #average entropy of sample's Normal distributions
+        tf.print("entropy adjusted:", actor_optimizer.iterations, episode, FLAGS.entropy_coefficient*entropy_p, output_stream=sys.stderr, summarize=-1)
+
         delta_stopped = tf.stop_gradient(delta)
 
-        #(t*a), (t*a), (1) --> (1), (1) --> (1)
-        actor_loss = -tf.reduce_mean(v, keepdims=False)
+        if FLAGS.algorithm == 'A2C':
+          #(t*a), (t*a), (1) --> (1), (1) --> (1)
+          #possible: substract entropy from each and mean
+          #actor_loss = -tf.reduce_mean(tf.math.log(tf.math.maximum(1e-15, sample_batch))*delta_stopped, keepdims=False) #- FLAGS.entropy_coefficient*entropy_p
+          actor_loss = -tf.reduce_mean(v, keepdims=False) #- FLAGS.entropy_coefficient*entropy_p
+          #actor_loss = -tf.reduce_mean(tf.math.log(tf.math.maximum(1e-15, sample_batch))*delta_stopped, keepdims=False) - FLAGS.entropy_coefficient*entropy_p
 
-        tf.print("actor loss:", actor_optimizer.iterations, episode, actor_loss, actor_optimizer.lr(actor_optimizer.iterations), output_stream=sys.stderr, summarize=-1)
+        elif FLAGS.algorithm == 'PPO':
+          r = sample_batch/sample_old
+
+          #(t*a,), (t*a) --> (1)
+          actor_loss = -tf.reduce_mean(tf.math.minimum(r*delta_stopped,tf.clip_by_value(r,1-0.2,1+0.2)*delta_stopped), keepdims=False) - FLAGS.entropy_coefficient*entropy_p
+
+        tf.print("actor loss:", actor_optimizer.iterations, episode, actor_loss, actor_optimizer.lr(actor_optimizer.iterations), time.time() - start_time, output_stream=sys.stderr, summarize=-1)
+
+        sample_old = sample_batch
 
       actor_gradients = actor_tape.gradient(actor_loss, actor.variables)
       critic_gradients = critic_tape.gradient(critic_loss, critic.variables)
@@ -226,8 +268,8 @@ def train():
 
 def main():
   if FLAGS.action == 'TRAIN':
-    with tf.device('/cpu:0'):
-      train()
+    #with tf.device('/cpu:0'):
+    train()
   elif FLAGS.action == 'PREDICT':
     with tf.device('/cpu:0'):
       predict()
@@ -256,8 +298,12 @@ if __name__ == '__main__':
             help='How many features in Critic/Actor network.')
     parser.add_argument('--hidden_size', type=int, default=96,
             help='Actor and Critic layers hidden size.')
+    parser.add_argument('--entropy_coefficient', type=float, default=0.0001,
+            help='Applied to entropy regularizing value for actor loss.')
     parser.add_argument('--gamma', type=float, default=0.99,
             help='Discount in future rewards.')
+    parser.add_argument('--algorithm', default='A2C', choices=['A2C','PPO'],
+            help='Learning algorithm for critic and actor.')
     parser.add_argument('--critical_balance', type=float, default=0.005,
             help='Critical balance comes earlier than overdraft as an additional warning to the model.')
     parser.add_argument('--zero_weight', type=float, default=0.1,

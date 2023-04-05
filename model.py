@@ -48,21 +48,24 @@ class Actor(tf.Module):
     self.layer1 = Dense(num_features, hidden_size, activation=None)
     self.layer2 = Dense(hidden_size, hidden_size, activation=None)
     self.layer3 = Dense(hidden_size, 2, activation=None)
+    self.group_normalization_1 = tfa.layers.GroupNormalization(groups=1, axis=-1)
+    self.group_normalization_2 = tfa.layers.GroupNormalization(groups=1, axis=-1)
     #self.mu = Dense(num_features, 1, activation=tf.math.tanh)
     #self.log_var = Dense(num_features, 1, activation=tf.nn.sigmoid)
     self.activation = activation
     self.dropout_prob = dropout_prob
     self.safety_level = safety_level
     self.transfer_limit = transfer_limit
+  @tf.function
   def __call__(self, state):
     #[I, P] --> [I]
     layer_output = self.layer1(state)
-    layer_output = tfa.layers.GroupNormalization(groups = 1)(layer_output) 
+    layer_output = self.group_normalization_1(layer_output)
     layer_output = self.activation(layer_output)
     layer_output = tf.nn.dropout(layer_output, self.dropout_prob)
 
     layer_output = self.layer2(layer_output)
-    layer_output = tfa.layers.GroupNormalization(groups = 1)(layer_output) 
+    layer_output = self.group_normalization_2(layer_output)
     layer_output = self.activation(layer_output)
     layer_output = tf.nn.dropout(layer_output, self.dropout_prob)
 
@@ -72,18 +75,20 @@ class Actor(tf.Module):
     #layer_output = tf.nn.dropout(layer_output, self.dropout_prob)
 
     # 0 <= u <= 1 eq 3
-    #I just limits to $10,000. I was experimenting with variety of other funtions like tanh, shifted positive and squeezed 
+    #return tf.nn.relu(layer_output)
     return tf.nn.sigmoid(layer_output)*self.transfer_limit
+    #return tf.math.softplus(layer_output)
 
   def random(self, state):
     #(a, f) --> 2*(a)
     mu_std = self(state)
+    #(a)
+    dist = tfd.Normal(loc=mu_std[:, 0], scale=mu_std[:, 1])
 
     epsilon = 0.0
-    #this might help exploring or use NoisyDense 
     #epsilon = tf.random.normal([mu_std.shape[0]], mean=0.0, stddev=1.0, dtype=tf.dtypes.float32, name='epsilon')
 
-    return mu_std[:, 0] + epsilon
+    return mu_std[:, 0] + epsilon, dist.entropy(), tf.squeeze(dist.sample([1]), axis=0)
           
   def best(self, state):
     #best means mean for continuous action space modeled with Normal distribution
@@ -99,15 +104,17 @@ class Critic(tf.Module):
     super(Critic, self).__init__()
     self.layer1 = Dense(num_features+1, hidden_size, activation=None)
     self.layer2 = Dense(hidden_size, 1, activation=None)
+    self.group_normalization_1 = tfa.layers.GroupNormalization(groups=1, axis=-1)
     self.activation = activation
     self.dropout_prob = dropout_prob
+  @tf.function
   def __call__(self, state, action):
     #[I, P] --> [I]
 
     s_a = tf.concat([state, tf.expand_dims(action, 1)], axis=1)
 
     layer_output = self.layer1(s_a)
-    layer_output = tfa.layers.GroupNormalization(groups = 1)(layer_output) 
+    layer_output = self.group_normalization_1(layer_output)
     layer_output = self.activation(layer_output)
     layer_output = tf.nn.dropout(layer_output, self.dropout_prob)
 
@@ -136,7 +143,6 @@ class Env(tf.Module):
     #(a) + (a) --> (a)
     x_u = self.x + u
     #there can be more money on the account than 100k that is used to normalize data
-    #other project, inventory management, this is limited by shelf size
     #x_u = tf.math.minimum(1, self.x + u)
 
     overdraft = tf.math.minimum(0, x_u - sales)
@@ -156,7 +162,6 @@ class Env(tf.Module):
 
     #(a), (a), (a), (a) --> (a)
     r = tf.cast(1 - z - critical - q, tf.float32)
-    #some experimental reward function. Didn't work actually
     #r = tf.cast(1- (tf.math.exp(-self.zero_weight*(self.x-overdraft))+q), tf.float32)
 
     return self.x, overdraft, r, z, critical, q
